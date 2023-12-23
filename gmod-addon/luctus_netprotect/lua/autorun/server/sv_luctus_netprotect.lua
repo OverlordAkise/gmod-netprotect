@@ -139,8 +139,8 @@ function LuctusNetprotectDisable()
     end
 end
 
-hook.Add("InitPostEntity","luctus_netprotect_cleanup",function()
-    print("[luctus_netprotect] Setting to off for cleanup")
+hook.Add("PlayerInitialSpawn","luctus_netprotect_reset",function()
+    print("[luctus_netprotect] Setting to off after server restart")
     local ret = HTTP({
         failed = function(failMessage) print("[luctus_netprotect] Error during stop! (/stop)") error(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] cleaned up!",httpcode,body) end, 
@@ -153,6 +153,7 @@ hook.Add("InitPostEntity","luctus_netprotect_cleanup",function()
     if not ret then
         error("ERROR: Couldn't make http request to luctus netprotect /stop!")
     end
+    hook.Remove("PlayerInitialSpawn","luctus_netprotect_reset")
 end)
 
 concommand.Add("netprotect", function(ply, cmd, args, argstr)
