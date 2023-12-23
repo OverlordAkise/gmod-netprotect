@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"time"
@@ -23,11 +24,23 @@ type HIPs struct {
 }
 
 func main() {
+	var gameport int
+	flag.IntVar(&gameport, "gameport", 27015, "The port where the gameserver listens, aka. the port you want to protect")
+	var apiport int
+	flag.IntVar(&apiport, "apiport", 3531, "The port of the http web API")
+	var logpath string
+	flag.StringVar(&logpath, "logpath", "stdout", "Where the logs should be written to, default: stdout")
+
+	flag.Parse()
+
+	targetport := strconv.Itoa(gameport)
+	ginport := strconv.Itoa(apiport)
+
 	starttime := time.Now()
 	//Logger
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
-		"stdout",
+		logpath,
 	}
 	flogger, _ := cfg.Build()
 	logger = flogger.Sugar()
@@ -51,7 +64,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = ipt.InsertUnique("filter", "GMOD", 5, "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", "27015", "-j", "ACCEPT")
+		err = ipt.InsertUnique("filter", "GMOD", 5, "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 		if err != nil {
 			panic(err)
 		}
@@ -68,12 +81,11 @@ func main() {
 			panic(err)
 		}
 		for _, ip := range hips.IPs {
-			err = ipt.InsertUnique("filter", "GMOD", 5, "-s", ip+"/32", "-p", "udp", "-m", "udp", "--dport", "27015", "-j", "ACCEPT")
+			err = ipt.InsertUnique("filter", "GMOD", 5, "-s", ip+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 			if err != nil {
 				panic(err)
 			}
 		}
-
 		c.String(200, "ok")
 	})
 
@@ -86,7 +98,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = ipt.Delete("filter", "GMOD", "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", "27015", "-j", "ACCEPT")
+		err = ipt.Delete("filter", "GMOD", "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 		if err != nil {
 			panic(err)
 		}
@@ -98,11 +110,11 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = ipt.InsertUnique("filter", "GMOD", 1, "-p", "udp", "--dport", "27015", "-m", "hashlimit", "--hashlimit-name", "mainmain", "--hashlimit-above", "35/sec", "--hashlimit-mode", "srcip", "-j", "DROP")
+		err = ipt.InsertUnique("filter", "GMOD", 1, "-p", "udp", "--dport", targetport, "-m", "hashlimit", "--hashlimit-name", "mainmain", "--hashlimit-above", "35/sec", "--hashlimit-mode", "srcip", "-j", "DROP")
 		if err != nil {
 			panic(err)
 		}
-		err = ipt.AppendUnique("filter", "GMOD", "-p", "udp", "-m", "udp", "--dport", "27015", "-m", "hashlimit", "--hashlimit-above", "1/min", "--hashlimit-burst", "5", "--hashlimit-mode", "srcip", "--hashlimit-name", "main", "-j", "DROP")
+		err = ipt.AppendUnique("filter", "GMOD", "-p", "udp", "-m", "udp", "--dport", targetport, "-m", "hashlimit", "--hashlimit-above", "1/min", "--hashlimit-burst", "5", "--hashlimit-mode", "srcip", "--hashlimit-name", "main", "-j", "DROP")
 		if err != nil {
 			panic(err)
 		}
@@ -140,7 +152,7 @@ func main() {
 		panic(err)
 	}
 	//General rule: Max ticks/second packets allowed
-	err = initipt.InsertUnique("filter", "INPUT", 1, "-m", "udp", "-p", "udp", "--dport", "27015", "-j", "GMOD")
+	err = initipt.InsertUnique("filter", "INPUT", 1, "-m", "udp", "-p", "udp", "--dport", targetport, "-j", "GMOD")
 	if err != nil {
 		logger.Infow("INPUT to GMOD rule already installed")
 	} else {
@@ -155,6 +167,6 @@ func main() {
 	donetime := time.Now()
 	logger.Infow("Startup finished", "time", donetime.Sub(starttime))
 	fmt.Println("Luctus Netprotect started, time taken: ", donetime.Sub(starttime))
-	fmt.Println("Listening on 127.0.0.1:3531")
-	fmt.Println(app.Run("127.0.0.1:3531"))
+	fmt.Println("Listening on 127.0.0.1:" + ginport)
+	fmt.Println(app.Run("127.0.0.1:" + ginport))
 }

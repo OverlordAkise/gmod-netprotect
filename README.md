@@ -36,6 +36,8 @@ go build .
 
 Then simply move the gmod addon folder (named `luctus_netprotect`) into your gmodserver's addons folder and restart the gameserver.
 
+To change the gameport you can use `-gameport 12345`, for more details see `./netprotect -h`.
+
 
 ## Usage
 
