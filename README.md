@@ -45,6 +45,15 @@ To enable the protection simply use the `!netprotect on` chat command or `netpro
 To turn the protection off use `off` in the command instead of "on".
 
 
+## Results
+
+![performance_dos.png](performance_dos.png)
+
+I sadly haven't been able to capture a distributed denial of service attack yet, but the above is a screenshot of netprotect working against a single attacker (=single ip).  
+Because of the 33/s limit a single IP can not take down the gameserver anymore.  
+In the above screenshot you can see how the bandwidth (from one ip only) stays the same, but the UDP errors drop immediately after activating luctus netprotect.
+
+
 ## Internal workings
 
 A Garry's Mod server has to listen on a port, by default this is 27015.  
