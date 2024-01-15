@@ -3,7 +3,7 @@
 DDoS protection for Garry's Mod server
 
 
-## About
+# About
 
 This is an anti-ddos solution for garry's mod servers.  
 It helps against udp network floods to the gameserver port.
@@ -12,8 +12,20 @@ It helps against udp network floods to the gameserver port.
 
 It was tested on Debian 11 and Debian 12 with a standard 32bit gmod server installed with LinuxGSM.
 
+# Versions
 
-## Installation
+There now exists 2 versions for netprotect: Iptables and Proxy.  
+The garrysmod addon is the same for both versions.
+
+The `server_iptables` version has no proxy between player and gameserver. It only has firewall rules (=iptables) which protect the server. This has an advantage of being very "low cost" as the firewall does all the filtering.
+
+The `server_proxy` version has a proxy server between the player and gameserver. Every packet goes through the proxy, which means you can also easily add more rules to it. This has the advantage of being monitor-able via prometheus/grafana while also being very robust.
+
+If you can't decide between versions then use the iptables version as it has been tested more thoroughly.
+
+# Installation
+
+You need to have golang installed.
 
 It is important that your gameserver starts with the
 
@@ -21,25 +33,53 @@ It is important that your gameserver starts with the
 
 start-parameter because without it the gmodserver can't send network messages to the locally running api webserver.
 
-Basic installation steps for the rest api server are, as root user:
+Move the gmod addon folder (named `luctus_netprotect`) into your gmodserver's addons folder and restart the gameserver.
+
+
+## Iptables version
+Basic installation steps are, as root user:
 
 ```bash
 # Become root if not already:
 sudo -i
 
 git clone https://github.com/OverlordAkise/gmod-netprotect.git
-cd gmod-netprotect/server
+cd gmod-netprotect/server_iptables
 go get .
 go build .
 ./netprotect &
 ```
 
-Then simply move the gmod addon folder (named `luctus_netprotect`) into your gmodserver's addons folder and restart the gameserver.
-
 To change the gameport you can use `-gameport 12345`, for more details see `./netprotect -h`.
 
 
-## Usage
+## Proxy version
+Basic installation steps are, as root user:
+
+```bash
+# Become root if not already:
+sudo -i
+
+git clone https://github.com/OverlordAkise/gmod-netprotect.git
+cd gmod-netprotect/server_proxy
+go get .
+go build .
+./netprotect &
+```
+
+You can use `./netprotect -help` to view all the options to change tickrate, delay, ports and more.  
+After the proxy is running you have to add the firewall rules so that the proxy is actually being used:
+
+```bash
+iptables -t raw -A PREROUTING -i eth0 -p udp --dport 27015 -j MARK --set-mark 1
+iptables -t raw -A PREROUTING -m mark --mark 1 -j CT --zone-orig 1
+iptables -t nat -A PREROUTING -p udp -m mark --mark 1 -j REDIRECT --to-ports 22000
+```
+
+To disable the proxy you can use the same rules as above but replace `-A` with `-D`. You can enable or disable these redirect firewall rules whenever you want, the players will NOT notice any impact and you do NOT have to restart the gameserver.
+
+
+# Usage
 
 To enable the protection simply use the `!netprotect on` chat command or `netprotect on` console command.  
 To turn the protection off use `off` in the command instead of "on".
@@ -54,7 +94,7 @@ Because of the 33/s limit a single IP can not take down the gameserver anymore.
 In the above screenshot you can see how the bandwidth (from one ip only) stays the same, but the UDP errors drop immediately after activating luctus netprotect.
 
 
-## Internal workings
+## Internal workings of the iptables version
 
 A Garry's Mod server has to listen on a port, by default this is 27015.  
 This port only listens for udp and all gameplay-related traffic is only udp, even the initial connection to the gameserver.
@@ -101,3 +141,14 @@ Last but not least is the anti-ddos rule itself. If you are not a player and not
 
 I highly recommend to not let this protection be always on.  
 Multiplayer queries arrive at port 27015 via udp too and I am unsure, even after a lot of testing, if these protecting firewall rules break anything.
+
+
+## Internal workings of the proxy version
+
+This is a single core application but it still is able to forward 1000 packets per second easily.
+
+The average delay of forwarding (seen by prometheus) is ~100µs for 1-3 packets per second, ~80µs for 66 packets per second and when benchmarking it ~20µs for 10.000 packets per second.
+
+The go proxyserver rebuilds the packets of the clients from scratch and resends it to the actual gameserver via loopback interface. The rebuilding uses google's "gopacket" module and works very quickly. We need root privilege because we send custom network packages. We need to set the source IP to the clients IP so that the gameserver doesn't send the response through the proxy but instead directly to the client/player.
+
+The proxy triples the network bandwidth used for the gameserver, which is visible in grafana. It receives the data, forwards it to the gameserver and the gameserver receives the data. This means you have eth0-in -> lo0-out -> lo0-in instead of a single eth0-in. This should not be a problem thanks to the 3packets/min/ip filter of the proxy. (I also tested it without this filter and my 4core linux server was able to easily handle 500Mbit/s \* 3 for minutes on end)
