@@ -71,6 +71,7 @@ You can use `./netprotect -help` to view all the options to change tickrate, del
 After the proxy is running you have to add the firewall rules so that the proxy is actually being used:
 
 ```bash
+iptables -I INPUT -p udp -m udp --dport 22000 -j ACCEPT
 iptables -t raw -A PREROUTING -i eth0 -p udp --dport 27015 -j MARK --set-mark 1
 iptables -t raw -A PREROUTING -m mark --mark 1 -j CT --zone-orig 1
 iptables -t nat -A PREROUTING -p udp -m mark --mark 1 -j REDIRECT --to-ports 22000
