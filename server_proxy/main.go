@@ -45,14 +45,19 @@ func createForwardSocket(ifName string) (net.PacketConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed open socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW): %s", err)
 	}
-	syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1)
-
+	err = syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1)
+	if err != nil {
+		return nil, err
+	}
 	if ifName != "" {
-		_, err := net.InterfaceByName(ifName)
+		_, err = net.InterfaceByName(ifName)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to find interface: %s: %s", ifName, err)
 		}
-		syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifName)
+		err = syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	conn, err := net.FilePacketConn(os.NewFile(uintptr(fd), fmt.Sprintf("fd %d", fd)))
@@ -115,6 +120,9 @@ func main() {
 		loglocation,
 	}
 	flogger, err := cfg.Build()
+	if err != nil {
+		panic(err)
+	}
 	logger := flogger.Sugar()
 
 	//Metrics
@@ -238,7 +246,7 @@ func main() {
 			requestCounter.Inc()
 			sizeCounter.Add(float64(n))
 			debugPrint(svdst, n, "<-")
-			timeCounter.Add(float64(time.Now().Sub(sCurTime)))
+			timeCounter.Add(float64(time.Since(sCurTime)))
 		}
 	}()
 
