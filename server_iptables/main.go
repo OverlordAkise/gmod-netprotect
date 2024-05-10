@@ -28,6 +28,8 @@ func main() {
 	flag.IntVar(&gameport, "gameport", 27015, "The port where the gameserver listens, aka. the port you want to protect")
 	var apiport int
 	flag.IntVar(&apiport, "apiport", 3531, "The port of the http web API")
+    var maxrate int
+	flag.IntVar(&maxrate, "maxrate", 34, "How many packets are allowed per player per second, best is tickrate+1")
 	var logpath string
 	flag.StringVar(&logpath, "logpath", "stdout", "Where the logs should be written to, default: stdout")
 
@@ -110,7 +112,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = ipt.InsertUnique("filter", "GMOD", 1, "-p", "udp", "--dport", targetport, "-m", "hashlimit", "--hashlimit-name", "mainmain", "--hashlimit-above", "35/sec", "--hashlimit-mode", "srcip", "-j", "DROP")
+		err = ipt.InsertUnique("filter", "GMOD", 1, "-p", "udp", "--dport", targetport, "-m", "hashlimit", "--hashlimit-name", "mainmain", "--hashlimit-above", strconv.Itoa(maxrate)+"/sec", "--hashlimit-mode", "srcip", "-j", "DROP")
 		if err != nil {
 			panic(err)
 		}
