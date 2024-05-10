@@ -1,6 +1,12 @@
 --Luctus Netprotect
 --Made by OverlordAkise
 
+--Target for netprotect http calls
+LUCTUS_NETPROTECT_HOST = "http://localhost:3531/"
+
+
+-- CONFIG END
+
 LUCTUS_NETPROTECT_ACTIVE = LUCTUS_NETPROTECT_ACTIVE or false
 
 LUCTUS_NETPROTECT_CONNECT_CACHE = LUCTUS_NETPROTECT_CONNECT_CACHE or {}
@@ -11,16 +17,16 @@ hook.Add("PlayerConnect","luctus_netprotect",function(name, ip)
     ip = string.Split(ip,":")[1]
     LUCTUS_NETPROTECT_CONNECT_CACHE[name] = ip
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during IP adding of player! (/add)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during IP adding of player! (/add)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] IPs of joining player added!",httpcode,body) end, 
         method = "POST",
-        url = "http://localhost:3531/add",
+        url = LUCTUS_NETPROTECT_HOST.."add",
         body = util.TableToJSON({["ip"]=ip}),
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /add!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /add!")
     end
 end)
 
@@ -39,7 +45,8 @@ hook.Add("player_disconnect","luctus_netprotect",function(data)
     end
 end)
 
-hook.Add("PlayerInitialSpawn","luctus_netprotect_cleanup",function(ply)
+hook.Add("PlayerInitialSpawn","luctus_netprotect",function(ply)
+    ply.netprotectSpawned = true
     if ply.SteamName then
         LUCTUS_NETPROTECT_CONNECT_CACHE[ply:SteamName()] = nil
     end
@@ -57,16 +64,16 @@ end)
 
 function LuctusNetprotectRemoveIP(ip)
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during IP delete of player! (/del)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during IP delete of player! (/del)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] IPs of leaving player removed!",httpcode,body) end, 
         method = "POST",
-        url = "http://localhost:3531/del",
+        url = LUCTUS_NETPROTECT_HOST.."del",
         body = util.TableToJSON({["ip"]=ip}),
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /del!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /del!")
     end
 end
 
@@ -86,22 +93,22 @@ function LuctusNetProtectAddLivePlayers()
     end
     
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during IP adding of current players! (/addmany)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during IP adding of current players! (/addmany)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] IPs of current players added!",httpcode,body) end, 
         method = "POST",
-        url = "http://localhost:3531/addmany",
+        url = LUCTUS_NETPROTECT_HOST.."addmany",
         body = util.TableToJSON({["ips"]=ips}),
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /addmany!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /addmany!")
     end
 end
 
 function LuctusNetProtectEnable(callback)
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during start! (/start)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during start! (/start)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers)
             print("[luctus_netprotect] activated!",httpcode,body)
             if callback and isfunction(callback) then
@@ -109,49 +116,50 @@ function LuctusNetProtectEnable(callback)
             end
         end, 
         method = "POST",
-        url = "http://localhost:3531/start",
+        url = LUCTUS_NETPROTECT_HOST.."start",
         body = "",
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /start!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /start!")
     end
+    hook.Run("LuctusNetprotectActivated")
 end
 
 function LuctusNetprotectDisable()
     if not LUCTUS_NETPROTECT_ACTIVE then
-        print("ERROR: Luctus Netprotect is not active!")
-        return
+        print("WARN: Luctus Netprotect is not active, but disable called!")
     end
     LUCTUS_NETPROTECT_ACTIVE = false
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during stop! (/stop)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during stop! (/stop)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] deactivated!",httpcode,body) end, 
         method = "POST",
-        url = "http://localhost:3531/stop",
+        url = LUCTUS_NETPROTECT_HOST.."stop",
         body = "",
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /stop!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /stop!")
     end
+    hook.Run("LuctusNetprotectDeactivated")
 end
 
 hook.Add("PlayerInitialSpawn","luctus_netprotect_reset",function()
     print("[luctus_netprotect] Setting to off after server restart")
     local ret = HTTP({
-        failed = function(failMessage) print("[luctus_netprotect] Error during stop! (/stop)") error(failMessage) end,
+        failed = function(failMessage) print("[luctus_netprotect] Error during stop! (/stop)") ErrorNoHaltWithStack(failMessage) end,
         success = function(httpcode,body,headers) print("[luctus_netprotect] cleaned up!",httpcode,body) end, 
         method = "POST",
-        url = "http://localhost:3531/stop",
+        url = LUCTUS_NETPROTECT_HOST.."stop",
         body = "",
         type = "application/json; charset=utf-8",
         timeout = 3
     })
     if not ret then
-        error("ERROR: Couldn't make http request to luctus netprotect /stop!")
+        ErrorNoHaltWithStack("ERROR: Couldn't make http request to luctus netprotect /stop!")
     end
     hook.Remove("PlayerInitialSpawn","luctus_netprotect_reset")
 end)
@@ -175,6 +183,23 @@ hook.Add("PlayerSay","luctus_netprotect",function(ply,text)
     end
     if text == "!netprotect off" then
         LuctusNetprotectDisable()
+    end
+end)
+
+timer.Create("luctus_netprotect_auto",3,0,function()
+    local plyCount = 0
+    local packetLoss = 0
+    local tickRate = math.Round(1 / engine.TickInterval())
+    for k,ply in ipairs(player.GetHumans()) do
+        if not IsValid(ply) then return end
+        if not ply.netprotectSpawned then return end
+        packetLoss = packetLoss + ply:PacketLoss()
+        plyCount = plyCount + 1
+    end
+    if (plyCount*tickRate)/2 < packetLoss and not LUCTUS_NETPROTECT_ACTIVE and plyCount > 4 then
+        LuctusNetprotectActivate()
+        print("[luctus_netprotect] ATTENTION: packet loss detected, netprotect enabled!")
+        print(Format("Packetloss: %d/%d (ply:%d,tickrate:%d)",packetLoss,plyCount*tickRate,plyCount,tickRate))
     end
 end)
 
