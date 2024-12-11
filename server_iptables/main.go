@@ -1,19 +1,16 @@
 package main
 
 import (
+	// "fmt"
 	"flag"
-	"fmt"
 	"github.com/gin-gonic/gin"
+	"log/slog"
+	"os"
+	"strconv"
 	"time"
-	//Logging
-	ginzap "github.com/gin-contrib/zap"
-	"go.uber.org/zap"
 	//firewall
 	"github.com/coreos/go-iptables/iptables"
-	"strconv"
 )
-
-var logger *zap.SugaredLogger
 
 type HIP struct {
 	IP string `json:"ip" xml:"ip" binding:"required,ip"`
@@ -24,6 +21,8 @@ type HIPs struct {
 }
 
 func main() {
+	starttime := time.Now()
+
 	var gameport int
 	flag.IntVar(&gameport, "gameport", 27015, "The port where the gameserver listens, aka. the port you want to protect")
 	var apiport int
@@ -36,7 +35,6 @@ func main() {
 	flag.StringVar(&logpath, "logpath", "stdout", "Where the logs should be written to, default: stdout")
 	var preroute bool
 	flag.BoolVar(&preroute, "preroute", false, "Use raw/PREROUTING chain instead of filter/INPUT, use this when using pterodactyl")
-
 	flag.Parse()
 
 	table := "filter"
@@ -49,20 +47,36 @@ func main() {
 	targetport := strconv.Itoa(gameport)
 	ginport := strconv.Itoa(apiport)
 
-	starttime := time.Now()
 	//Logger
-	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		logpath,
+	var logger *slog.Logger
+	if logpath == "stdout" {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	} else {
+		f, err := os.OpenFile(logpath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		logger = slog.New(slog.NewTextHandler(f, nil))
 	}
-	flogger, _ := cfg.Build()
-	logger = flogger.Sugar()
 
 	//Webserver
 	gin.SetMode(gin.ReleaseMode)
 	app := gin.New()
-	app.Use(ginzap.RecoveryWithZap(flogger, true))
-	app.Use(ginzap.Ginzap(flogger, time.RFC3339, true))
+	app.Use(func(c *gin.Context) {
+		start := time.Now()
+
+		defer func() {
+			if r := recover(); r != nil {
+				c.String(500, "ERROR")
+				logger.Error("webreq", "status", c.Writer.Status(), "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP(), "duration", time.Since(start), "err", r)
+			}
+		}()
+
+		c.Next()
+
+		logger.Info("webreq", "status", c.Writer.Status(), "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP(), "duration", time.Since(start))
+	})
 
 	app.GET("/", func(c *gin.Context) {
 		c.String(200, "ok")
@@ -167,20 +181,12 @@ func main() {
 	//General rule: Max ticks/second packets allowed
 	err = initipt.InsertUnique(table, mainChain, 1, "-m", "udp", "-p", "udp", "--dport", targetport, "-j", "GMOD")
 	if err != nil {
-		logger.Errorw("error inserting main jump rule")
+		logger.Error("error inserting main jump rule", "err", err)
 	} else {
-		logger.Infow("Added main jump rule successfully")
+		logger.Info("added main jump rule successfully")
 	}
 
-	/*
-	   defer func(){
-
-	   }()
-	*/
-	donetime := time.Now()
-	logger.Infow("Startup finished", "time", donetime.Sub(starttime))
-	fmt.Println("Luctus Netprotect started, time taken: ", donetime.Sub(starttime))
-	fmt.Println("Listening on " + listenip + ":" + ginport)
+	logger.Info("Luctus Netprotect started", "startuptime", time.Since(starttime), "listenip", listenip, "listenport", ginport)
 	err = app.Run(listenip + ":" + ginport)
 	if err != nil {
 		panic(err)
