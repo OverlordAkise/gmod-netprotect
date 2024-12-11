@@ -91,6 +91,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		logger.Info("adding ip", "ip", hip.IP)
 		err = ipt.InsertUnique(table, "GMOD", 5, "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 		if err != nil {
 			panic(err)
@@ -108,6 +109,7 @@ func main() {
 			panic(err)
 		}
 		for _, ip := range hips.IPs {
+			logger.Info("adding ip", "ip", ip)
 			err = ipt.InsertUnique(table, "GMOD", 5, "-s", ip+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 			if err != nil {
 				panic(err)
@@ -125,6 +127,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		logger.Info("removing ip", "ip", hip.IP)
 		err = ipt.Delete(table, "GMOD", "-s", hip.IP+"/32", "-p", "udp", "-m", "udp", "--dport", targetport, "-j", "ACCEPT")
 		if err != nil {
 			panic(err)
@@ -170,6 +173,7 @@ func main() {
 
 	initipt, err := iptables.New()
 	if err != nil {
+		logger.Error("are you running as root?")
 		panic(err)
 	}
 
@@ -178,7 +182,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	//General rule: Max ticks/second packets allowed
+
 	err = initipt.InsertUnique(table, mainChain, 1, "-m", "udp", "-p", "udp", "--dport", targetport, "-j", "GMOD")
 	if err != nil {
 		logger.Error("error inserting main jump rule", "err", err)
